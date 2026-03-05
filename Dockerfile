@@ -11,6 +11,10 @@ RUN npm ci --only=production
 # Copiar código da aplicação
 COPY . .
 
+# Create a non-root user for security
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+USER nodejs
+
 # Expor porta
 EXPOSE 3000
 

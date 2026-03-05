@@ -14,5 +14,8 @@ module.exports = {
       statements: 50
     }
   },
-  verbose: true
+  verbose: true,
+  forceExit: true,
+  detectOpenHandles: true,
+  testTimeout: 10000
 };
