@@ -1,5 +1,6 @@
 name: CI/CD Pipeline
 
+# Dispara o workflow em push ou pull request
 on:
   push:
     branches: [ main, develop ]
@@ -7,46 +8,69 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  test:
+  # ============================================
+  # JOB 1: VALIDAÇÃO DO CÓDIGO (LINT E TESTES)
+  # ============================================
+  validate:
     runs-on: ubuntu-latest
+    name: Validar Código
     
     strategy:
       matrix:
         node-version: [18.x, 20.x]
     
     steps:
-    - uses: actions/checkout@v3
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v3
     
-    - name: Usar Node.js ${{ matrix.node-version }}
+    - name: ⚙️ Configurar Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
     
-    - name: Instalar dependências
+    - name: 📦 Instalar dependências
       run: npm ci
     
-    - name: Executar linter
+    - name: 🔍 Executar linter (validar código)
       run: npm run lint
       continue-on-error: true
     
-    - name: Executar testes
+    - name: ✅ Executar testes automatizados
       run: npm test
     
-    - name: Build
-      run: npm run build
+    outputs:
+      status: success
 
-  docker-build:
+  # ============================================
+  # JOB 2: BUILD E CONTAINERIZAÇÃO
+  # ============================================
+  # DEPENDÊNCIA: Este job SÓ roda se o job 'validate' passar
+  build:
     runs-on: ubuntu-latest
-    needs: test
+    name: Build da Aplicação
+    needs: validate  # ⚠️ DEPENDÊNCIA: Aguarda conclusão do job 'validate'
     
     steps:
-    - uses: actions/checkout@v3
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v3
     
-    - name: Set up Docker Buildx
+    - name: ⚙️ Configurar Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+    
+    - name: 📦 Instalar dependências
+      run: npm ci
+    
+    - name: 🔨 Executar build
+      run: npm run build
+    
+    - name: 🐳 Setup Docker Buildx
       uses: docker/setup-buildx-action@v2
     
-    - name: Build Docker image
+    - name: 🏗️ Build da imagem Docker
       uses: docker/build-push-action@v4
       with:
         context: .
@@ -54,14 +78,53 @@ jobs:
         tags: site-exemplo-cicd:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
+    
+    outputs:
+      build-status: success
 
-  security-scan:
+  # ============================================
+  # JOB 3: DEPLOY E VARIÁVEIS SECRETAS
+  # ============================================
+  # DEPENDÊNCIA: Este job SÓ roda se o job 'build' passar
+  deploy:
     runs-on: ubuntu-latest
+    name: Deploy e Mensagem Secreta
+    needs: build  # ⚠️ DEPENDÊNCIA: Aguarda conclusão do job 'build'
     
     steps:
-    - uses: actions/checkout@v3
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v3
     
-    - name: Executar Trivy vulnerability scanner
+    - name: 🔐 Usar variável de ambiente secreta
+      run: |
+        echo "🔓 Acessando dados secretos..."
+        echo "📝 Mensagem Secreta: ${{ secrets.SECRET_MESSAGE }}"
+        echo "✅ Deploy simulado com sucesso!"
+        echo "🚀 Aplicação pronta para produção"
+      env:
+        # Se o secret não estiver configurado, mostra uma mensagem padrão
+        SECRET_MESSAGE: ${{ secrets.SECRET_MESSAGE || 'Esta é uma mensagem secreta do workflow!' }}
+    
+    - name: ✅ Confirmação final
+      run: |
+        echo "Pipeline CI/CD completado com sucesso! ✨"
+        echo "Todos os jobs passaram:"
+        echo "  ✓ validate (Validação do código)"
+        echo "  ✓ build (Build da aplicação)"
+        echo "  ✓ deploy (Deploy e segurança)"
+
+  # ============================================
+  # JOB 4: SCAN DE SEGURANÇA (INDEPENDENTE)
+  # ============================================
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Scan de Vulnerabilidades
+    
+    steps:
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v3
+    
+    - name: 🔒 Executar Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
         scan-type: 'fs'
@@ -69,7 +132,7 @@ jobs:
         format: 'sarif'
         output: 'trivy-results.sarif'
     
-    - name: Upload Trivy results to GitHub Security
+    - name: 📊 Upload de resultados de segurança
       uses: github/codeql-action/upload-sarif@v2
       if: always()
       with:
